@@ -1,0 +1,32 @@
+{
+  "model_name": "Heart Disease Prediction Model",
+  "version": "1.0",
+  "algorithm": "Support Vector Machine (Linear Kernel)",
+  "framework": "scikit-learn",
+  "input_features": [
+    "age", "trestbps", "chol", "thalach", "oldpeak",
+    "sex_0", "sex_1",
+    "cp_0", "cp_1", "cp_2", "cp_3",
+    "fbs_0", "fbs_1",
+    "restecg_0", "restecg_1", "restecg_2",
+    "exang_0", "exang_1",
+    "slope_0", "slope_1", "slope_2",
+    "ca_0", "ca_1", "ca_2", "ca_3", "ca_4",
+    "thal_0", "thal_1", "thal_2", "thal_3"
+  ],
+  "target_label": "target",
+  "preprocessing": {
+    "encoding": "One-Hot Encoding",
+    "scaling": "StandardScaler",
+    "train_test_split": {
+      "test_size": 0.2,
+      "random_state": 1
+    }
+  },
+  "dataset": {
+    "name": "UCI Heart Disease",
+    "samples": 303,
+    "features": 14,
+    "source": "Kaggle UCI Heart Disease Dataset"
+  }
+}
