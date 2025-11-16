@@ -11,12 +11,29 @@ class SLMModel:
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto"
         )
+        
+        print(f"✓ Model loaded on device: {self.model.device}")
 
-    def generate(self, prompt):
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+    def generate(self, prompt, max_tokens=200):
+        """
+        Generate text with optimized settings for speed
+        """
+        # Truncate input to prevent excessive processing
+        inputs = self.tokenizer(
+            prompt, 
+            return_tensors="pt", 
+            truncation=True, 
+            max_length=1024  # Limit input context
+        ).to(self.model.device)
+        
         output = self.model.generate(
             **inputs,
-            max_new_tokens=200,
-            temperature=0.2
+            max_new_tokens=max_tokens,
+            temperature=0.3,  # Lower for more focused output
+            do_sample=True,
+            top_p=0.9,
+            pad_token_id=self.tokenizer.eos_token_id,
+            num_beams=1  # Greedy decoding for speed
         )
+        
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
