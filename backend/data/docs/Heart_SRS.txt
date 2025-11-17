@@ -1,0 +1,139 @@
+Software Requirements Specification (SRS)
+
+1. Introduction
+
+1.1 Purpose
+
+This SRS describes the functional and non-functional requirements of a
+Heart Disease Prediction system using an SVM (Support Vector Machine)
+classifier. The system trains a machine-learning model on a heart
+disease dataset, evaluates it, and saves the trained model and scaler
+for future use.
+
+1.2 Scope
+
+The system loads heart disease data, preprocesses it, trains a linear
+SVM model, evaluates its performance, and exports the final model. This
+supports downstream usage such as a prediction API or UI.
+
+1.3 Technologies Used
+
+-   Python
+-   Pandas, NumPy
+-   Scikit-learn
+-   Joblib
+-   CSV dataset (heart.csv)
+
+------------------------------------------------------------------------
+
+2. Overall Description
+
+2.1 System Overview
+
+The system performs: 1. Data loading
+2. One-hot encoding of categorical variables
+3. Train-test splitting
+4. Feature scaling
+5. Model training using SVM
+6. Evaluation (accuracy, confusion matrix)
+7. Saving the model and scaler
+
+2.2 User Classes
+
+-   Developer / Data Scientist: Runs training code and produces the
+    model.
+-   Model Consumer: Uses generated model for predictions.
+
+------------------------------------------------------------------------
+
+3. Functional Requirements
+
+FR-1: Load Dataset
+
+-   System must load heart.csv from the working directory.
+-   Must print confirmation and preview.
+
+FR-2: Preprocess Data
+
+-   Must separate target variable (target).
+-   Must apply one-hot encoding to categorical columns:
+    -   sex, cp, fbs, restecg, exang, slope, ca, thal
+
+FR-3: Split Dataset
+
+-   Must split data into training and testing sets (80/20).
+-   Must use random_state=1.
+
+FR-4: Scale Features
+
+-   Must fit StandardScaler on training data.
+-   Must transform both training and test sets.
+
+FR-5: Train SVM Model
+
+-   Must train SVM with:
+    -   kernel = ‘linear’
+    -   random_state = 0
+
+FR-6: Predict & Evaluate
+
+-   Must generate predictions.
+-   Must compute:
+    -   confusion matrix
+    -   accuracy score
+
+FR-7: Save Model
+
+-   Must save:
+    -   heart_model.pkl
+    -   scaler.pkl
+
+------------------------------------------------------------------------
+
+4. Non-Functional Requirements
+
+NFR-1: Performance
+
+-   Model training should complete under a few seconds on a standard
+    CPU.
+-   Memory usage should remain within dataset limits.
+
+NFR-2: Usability
+
+-   Console logs should clearly indicate progress (loading, encoding,
+    training, saving).
+
+NFR-3: Maintainability
+
+-   Code must be modular and easy to integrate into larger systems.
+
+NFR-4: Portability
+
+-   Should run on any environment that supports Python 3 and required
+    libraries.
+
+------------------------------------------------------------------------
+
+5. System Outputs
+
+-   Console logs of each stage
+-   Confusion matrix
+-   Accuracy score
+-   heart_model.pkl
+-   scaler.pkl
+
+------------------------------------------------------------------------
+
+6. Constraints
+
+-   Requires scikit-learn-compatible dataset format.
+-   Depends on correct columns in heart.csv.
+
+------------------------------------------------------------------------
+
+7. Future Improvements
+
+-   Add cross-validation
+-   Add feature selection
+-   Add API for real-time prediction
+-   Add visualization of metrics

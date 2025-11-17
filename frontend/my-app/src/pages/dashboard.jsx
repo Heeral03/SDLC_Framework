@@ -386,6 +386,7 @@ export default function RAGChatbot() {
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             onChange={handleFileUpload}
             className="hidden"
             accept=".txt,.pdf,.py,.ipynb,.json,.csv,.md,.yaml,.yml,.pt,.pth,.pkl,.pickle,.js,.jsx,.ts,.tsx,.java,.cpp,.c,.h,.rs,.go,.rb,.php,.html,.css,.xml,.sh,.r,.sql"

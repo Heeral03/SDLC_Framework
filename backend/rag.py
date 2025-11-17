@@ -207,12 +207,31 @@ class RAGPipeline:
         self.db.persist()
         print("✓ Documents embedded and persisted to Chroma DB")
 
-    def query(self, question, k=5):
+    def query(self, question, k=5, source_files=None):
         """
-        Query the vector database with metadata
-        k: number of results to return (increased to 5 for better context)
+        Query the vector database with optional file filtering
+        
+        Args:
+            question: The query string
+            k: Number of results to return (default: 5)
+            source_files: Optional list of filenames to filter by (e.g., ['file1.py', 'file2.txt'])
+        
+        Returns:
+            Formatted string with search results
         """
-        results = self.db.similarity_search(question, k=k)
+        if source_files:
+            # Build full paths for filtering
+            full_paths = [os.path.join("./data/docs/", f) for f in source_files]
+            
+            # Query with metadata filter
+            results = self.db.similarity_search(
+                question, 
+                k=k,
+                filter={"source": {"$in": full_paths}}
+            )
+        else:
+            # Query all documents (no filtering)
+            results = self.db.similarity_search(question, k=k)
         
         # Format results with metadata
         formatted_results = []
