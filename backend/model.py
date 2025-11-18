@@ -14,7 +14,7 @@ class SLMModel:
         
         print(f"✓ Model loaded on device: {self.model.device}")
 
-    def generate(self, prompt, max_tokens=200):
+    def generate(self, prompt, max_tokens=2~00):
         """
         Generate text with optimized settings for speed
         """

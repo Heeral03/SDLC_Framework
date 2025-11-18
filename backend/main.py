@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 
 app = FastAPI()
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,26 +24,20 @@ if not os.path.exists("./chroma_db"):
 
 slm = SLMModel()
 
-# Create uploads directory
 UPLOAD_DIR = "./data/docs/"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Store conversation history per session
 conversations: Dict[str, List[Dict]] = {}
-# Store uploaded files per session
 session_files: Dict[str, List[str]] = {}
-# Track session activity timestamps
 session_timestamps: Dict[str, datetime] = {}
-# Track SDLC phase per session
 session_phases: Dict[str, str] = {}
 
 class ChatRequest(BaseModel):
     question: str
     session_id: str
     verify: bool = False
-    sdlc_phase: str = "auto"  # auto, requirements, design, development, testing, deployment, maintenance
+    sdlc_phase: str = "auto"
 
-# SDLC Phase Definitions
 SDLC_PHASES = {
     "requirements": {
         "name": "Requirements Analysis",
@@ -115,129 +108,129 @@ SDLC_PHASES = {
 }
 
 def detect_sdlc_phase(file_content: str, filename: str) -> str:
-    """Auto-detect SDLC phase based on file content and name"""
     file_lower = filename.lower()
     content_lower = file_content.lower()
     
-    # Requirements indicators
     if any(keyword in file_lower or keyword in content_lower for keyword in 
            ['requirement', 'srs', 'user story', 'use case', 'functional spec']):
         return "requirements"
-    
-    # Design indicators
     elif any(keyword in file_lower or keyword in content_lower for keyword in 
              ['design', 'architecture', 'uml', 'diagram', 'schema', 'erd']):
         return "design"
-    
-    # Testing indicators
     elif any(keyword in file_lower or keyword in content_lower for keyword in 
              ['test', 'pytest', 'unittest', 'spec.', 'test_', '_test']):
         return "testing"
-    
-    # Deployment indicators
     elif any(keyword in file_lower or keyword in content_lower for keyword in 
              ['deploy', 'docker', 'kubernetes', 'ci/cd', 'pipeline', '.yml', '.yaml']):
         return "deployment"
-    
-    # Code/Development indicators
     elif any(ext in file_lower for ext in ['.py', '.js', '.java', '.cpp', '.c', '.go', '.rs']):
         return "development"
     
-    # Default
     return "development"
 
-def format_response_for_display(text: str) -> str:
-    """
-    Format the AI response to be more presentable by:
-    - Converting asterisk points to numbered/bullet points
-    - Removing markdown symbols
-    - Ensuring proper paragraph structure
-    - Cleaning up formatting artifacts
-    """
+def format_sdlc_response(raw_response: str, phase_name: str) -> str:
     import re
     
-    # Remove common markdown symbols but keep the structure
-    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove bold
-    text = re.sub(r'\*(.*?)\*', r'\1', text)      # Remove italic
-    text = re.sub(r'`(.*?)`', r'\1', text)        # Remove inline code
-    text = re.sub(r'#+\s*', '', text)             # Remove headers
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', raw_response)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    text = re.sub(r'`(.*?)`', r'\1', text)
+    text = re.sub(r'#+\s*', '', text)
     
-    # Convert various bullet styles to clean numbered lists
-    lines = text.split('\n')
-    formatted_lines = []
-    in_list = False
-    list_counter = 1
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    
+    output = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    output += f"SDLC EVALUATION: {phase_name.upper()}\n"
+    output += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    current_section = None
+    section_content = []
+    
+    section_keywords = {
+        'analysis': ['ANALYSIS'],
+        'phase_compliance': ['PHASE COMPLIANCE', 'COMPLIANCE'],
+        'issues': ['ISSUES FOUND', 'ISSUES'],
+        'recommendations': ['RECOMMENDATIONS'],
+        'risk': ['RISK LEVEL', 'RISK'],
+        'next_steps': ['NEXT STEPS'],
+        'missing': ['MISSING INFORMATION', 'MISSING']
+    }
+    
+    def is_section_header(line):
+        line_upper = line.upper()
+        for section_type, keywords in section_keywords.items():
+            if any(keyword in line_upper for keyword in keywords):
+                return section_type
+        return None
+    
+    def format_section(section_name, content_lines):
+        if not content_lines:
+            return ""
+        
+        section_titles = {
+            'analysis': '📋 ANALYSIS',
+            'phase_compliance': '✓ PHASE COMPLIANCE',
+            'issues': '⚠ ISSUES FOUND',
+            'recommendations': '💡 RECOMMENDATIONS',
+            'risk': '🎯 RISK LEVEL',
+            'next_steps': '→ NEXT STEPS',
+            'missing': '❓ MISSING INFORMATION'
+        }
+        
+        result = f"\n{section_titles.get(section_name, section_name.upper())}\n"
+        result += "─" * 50 + "\n"
+        
+        item_counter = 1
+        for line in content_lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            line = re.sub(r'^\d+\.\s*', '', line)
+            line = re.sub(r'^[\*\-•]\s*', '', line)
+            
+            if section_name in ['issues', 'recommendations', 'next_steps', 'missing', 'phase_compliance']:
+                result += f"{item_counter}. {line}\n"
+                item_counter += 1
+            else:
+                result += f"{line}\n"
+        
+        return result + "\n"
     
     for line in lines:
-        line = line.strip()
+        section_type = is_section_header(line)
         
-        # Skip empty lines at the beginning of lists
-        if not line and in_list:
-            continue
-            
-        # Detect list items (various formats)
-        list_match = re.match(r'^[\*\-•]\s+(.*)', line)
-        numbered_match = re.match(r'^(\d+)\.?\s+(.*)', line)
-        
-        if list_match or numbered_match:
-            if not in_list:
-                in_list = True
-                list_counter = 1
-            
-            if list_match:
-                content = list_match.group(1)
-            else:
-                content = numbered_match.group(2)
-                list_counter = int(numbered_match.group(1))
-            
-            formatted_lines.append(f"{list_counter}. {content}")
-            list_counter += 1
-            
+        if section_type:
+            if current_section and section_content:
+                output += format_section(current_section, section_content)
+            current_section = section_type
+            section_content = []
         else:
-            if in_list:
-                in_list = False
-                formatted_lines.append('')  # Add spacing after list
-            
-            if line:
-                # Handle section headers
-                if line.endswith(':') and len(line) < 50:
-                    formatted_lines.append(f"\n{line.upper()}")
-                else:
-                    formatted_lines.append(line)
+            if current_section:
+                section_content.append(line)
+            else:
+                output += line + "\n"
     
-    # Join lines with proper spacing
-    result = '\n'.join(formatted_lines)
+    if current_section and section_content:
+        output += format_section(current_section, section_content)
     
-    # Clean up multiple empty lines
-    result = re.sub(r'\n\s*\n\s*\n', '\n\n', result)
+    output += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     
-    # Ensure proper spacing around lists
-    result = re.sub(r'(\S)\n(\d+\.)', r'\1\n\n\2', result)
-    
-    return result.strip()
+    return output
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), session_id: str = "default"):
-    """
-    Upload a file and add it to the RAG system
-    session_id: to track which user uploaded which files
-    """
     try:
-        # Save the uploaded file
         file_path = os.path.join(UPLOAD_DIR, file.filename)
         
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Track uploaded file for this session
         if session_id not in session_files:
             session_files[session_id] = []
         session_files[session_id].append(file.filename)
         
-        # Update session timestamp
         session_timestamps[session_id] = datetime.now()
         
-        # Load and process the file
         from langchain.text_splitter import RecursiveCharacterTextSplitter
         
         ext = os.path.splitext(file.filename)[1].lower()
@@ -282,12 +275,10 @@ async def upload_file(file: UploadFile = File(...), session_id: str = "default")
                 "filename": file.filename
             }
         
-        # Detect SDLC phase
         file_content = docs[0].page_content if docs else ""
         detected_phase = detect_sdlc_phase(file_content, file.filename)
         session_phases[session_id] = detected_phase
         
-        # Split and add to vector store
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
             chunk_overlap=80
@@ -296,7 +287,7 @@ async def upload_file(file: UploadFile = File(...), session_id: str = "default")
         rag.db.add_documents(chunks)
         rag.db.persist()
         
-        print(f"File uploaded: {file.filename} ({len(chunks)} chunks) for session {session_id}")
+        print(f"File uploaded: {file.filename} ({len(chunks)} chunks)")
         print(f"Detected SDLC Phase: {detected_phase}")
         
         return {
@@ -320,9 +311,6 @@ async def upload_file(file: UploadFile = File(...), session_id: str = "default")
 
 @app.post("/ask")
 def ask(request: ChatRequest):
-    """
-    Ask a question with SDLC-aware Decision Support System
-    """
     import time
     import json
     import re
@@ -331,17 +319,13 @@ def ask(request: ChatRequest):
     session_id = request.session_id
     question = request.question
     
-    # Initialize conversation history for new sessions
     if session_id not in conversations:
         conversations[session_id] = []
     
-    # Update session timestamp
     session_timestamps[session_id] = datetime.now()
     
-    # Get session-specific files
     session_specific_files = session_files.get(session_id, [])
     
-    # Determine SDLC phase
     if request.sdlc_phase != "auto":
         current_phase = request.sdlc_phase
     else:
@@ -349,157 +333,122 @@ def ask(request: ChatRequest):
     
     phase_info = SDLC_PHASES.get(current_phase, SDLC_PHASES["development"])
     
-    # Get relevant context from RAG - FILTERED by session files
+    # Get RAG context
     if session_specific_files:
-        # Query only the files uploaded in this session
-        context = rag.query(question, k=5, source_files=session_specific_files)
-        print(f"RAG query (filtered to {len(session_specific_files)} files) completed in {time.time() - start_time:.2f}s")
+        context = rag.query(question, k=4, source_files=session_specific_files)
     else:
-        # No files uploaded yet - search all documents (fallback)
-        context = rag.query(question, k=5)
-        print(f"RAG query (all documents - no session files) completed in {time.time() - start_time:.2f}s")
+        context = rag.query(question, k=4)
     
-    # Build conversation history
+    # Limit context to essential information only
+    context_summary = context[:800] if context else "No relevant documents found."
+    
+    # Build conversation history (last 4 exchanges only)
     conversation_context = ""
     if conversations[session_id]:
-        conversation_context = "\n\nPrevious conversation:\n"
-        # Only include last 3 exchanges to keep prompt short
-        for msg in conversations[session_id][-6:]:  # 3 Q&A pairs
-            conversation_context += f"{msg['role']}: {msg['content']}\n"
+        conversation_context = "\nRecent conversation:\n"
+        for msg in conversations[session_id][-4:]:
+            conversation_context += f"{msg['role']}: {msg['content'][:100]}...\n"
     
-    # Add uploaded files context
     files_context = ""
     if session_specific_files:
-        files_context = f"\n\nFiles in this session: {', '.join(session_specific_files)}"
+        files_context = f"Uploaded files: {', '.join(session_specific_files)}"
     
-    # SDLC-Aware Decision Support System Prompt
-    dss_prompt = f"""You are an expert Software Development Life Cycle (SDLC) Decision Support System.
+    # Optimized concise prompt
+    dss_prompt = f"""You are an expert SDLC Decision Support System.
 
-CURRENT SDLC PHASE
 Phase: {phase_info['name']}
 Description: {phase_info['description']}
-
-VERIFICATION CRITERIA FOR THIS PHASE
-{chr(10).join(f"{i+1}. {criterion}" for i, criterion in enumerate(phase_info['verification_criteria']))}
-
-{files_context}
-
-CONTEXT FROM UPLOADED DOCUMENTS
-{context}
+Context: {files_context}
+Relevant documents: {context_summary}
 {conversation_context}
 
-USER QUESTION
-{question}
+User question: {question}
 
-YOUR ROLE AS DSS
-As a Decision Support System for SDLC, you must:
+Task:
+1. Analyze the provided documents for the {phase_info['name']} phase
+2. Verify against these criteria:
+{chr(10).join(f"   - {criterion}" for criterion in phase_info['verification_criteria'])}
+3. Identify specific issues and gaps
+4. Provide clear, actionable recommendations
+5. Determine risk level: Low, Medium, or High
+6. List what additional information is needed (if any)
 
-1. Analyze the uploaded documents in the context of the current SDLC phase ({phase_info['name']})
+Output format (use these exact section headers):
 
-2. Verify against the phase-specific criteria listed above
+ANALYSIS:
+[2-3 sentences on current state and quality]
 
-3. Identify Issues:
-   - Missing requirements or documentation
-   - Best practice violations
-   - Security vulnerabilities
-   - Performance concerns
-   - Compliance gaps
+PHASE COMPLIANCE:
+[For each criterion: MET/PARTIAL/NOT MET with brief reason]
 
-4. Provide Recommendations:
-   - Specific, actionable improvements
-   - Industry best practices
-   - Risk mitigation strategies
-   - Next steps for this phase
+ISSUES FOUND:
+[List 3-5 specific issues or state "No critical issues found"]
 
-5. Reference Context: Use conversation history for context (e.g., "this file", "the code")
+RECOMMENDATIONS:
+[List 4-6 actionable recommendations, prioritized]
 
-6. Be Honest: If you cannot verify something from the provided context, clearly state what additional information is needed
+RISK LEVEL:
+[Low/Medium/High Risk with 2 sentence justification]
 
-OUTPUT FORMAT
-Provide a structured response with these sections:
+NEXT STEPS:
+[List 4-6 prioritized action items]
 
-ANALYSIS
-Provide a clear analysis of what you found in the documents
+MISSING INFORMATION:
+[What additional artifacts/data are needed, or state "None"]
 
-PHASE COMPLIANCE
-Evaluate how well the current state meets {phase_info['name']} criteria
+Be concise, specific, and actionable. Use numbered lists.
 
-ISSUES FOUND
-List specific problems identified, if any
-
-RECOMMENDATIONS
-Provide actionable improvement suggestions
-
-RISK LEVEL
-Assess the risk level: Low, Medium, or High
-
-NEXT STEPS
-Outline what should be done next
-
-Use clear, professional language without markdown formatting. Use numbered lists and proper paragraphs.
-
-Answer:"""
+Response:"""
     
-    print(f"Generating SDLC-aware response... (this may take 10-20 seconds)")
+    print(f"Generating SDLC analysis...")
     gen_start = time.time()
     
-    # Generate response with appropriate length for analysis
-    dss_output = slm.generate(dss_prompt, max_tokens=400)
+    dss_output = slm.generate(dss_prompt, max_tokens=700)
     
-    # Extract just the answer (remove the prompt echo)
-    answer_marker = "Answer:"
-    if answer_marker in dss_output:
-        dss_output = dss_output.split(answer_marker)[-1].strip()
+    if "Response:" in dss_output:
+        dss_output = dss_output.split("Response:")[-1].strip()
     
-    # Format the response for clean display
-    formatted_output = format_response_for_display(dss_output)
+    formatted_output = format_sdlc_response(dss_output, phase_info['name'])
     
     print(f"Response generated in {time.time() - gen_start:.2f}s")
     
-    # Store conversation history
     conversations[session_id].append({
         "role": "user",
         "content": question
     })
     conversations[session_id].append({
         "role": "assistant",
-        "content": formatted_output  # Store formatted version
+        "content": formatted_output
     })
     
-    # SDLC-Specific Verification
+    # Verification (if enabled)
     verification_result = None
     if request.verify:
-        print(f"Running SDLC compliance verification...")
-        verification_prompt = f"""
-You are an SDLC Compliance Auditor. Verify this response against {phase_info['name']} standards.
+        print(f"Running compliance verification...")
+        verification_prompt = f"""You are an SDLC Compliance Auditor.
 
-SDLC Phase: {phase_info['name']}
-Phase Criteria:
-{chr(10).join(f"- {criterion}" for criterion in phase_info['verification_criteria'])}
+Phase: {phase_info['name']}
+Criteria: {', '.join(phase_info['verification_criteria'])}
 
 Question: {question}
-DSS Answer: {formatted_output}
+Response: {dss_output[:500]}
 
-Evaluate and return JSON ONLY:
+Return ONLY valid JSON:
 {{
   "pass_fail": "PASS or FAIL",
-  "compliance_score": 0.0-1.0,
-  "phase_alignment": "How well the response aligns with {current_phase} phase",
-  "criteria_met": ["list of criteria that are satisfied"],
-  "criteria_failed": ["list of criteria that are not satisfied"],
+  "compliance_score": 0.85,
+  "criteria_met": ["criterion 1", "criterion 2"],
+  "criteria_failed": ["criterion 3"],
   "risk_level": "Low/Medium/High",
-  "security_concerns": ["any security issues identified"],
-  "recommendations": ["specific improvements needed"],
-  "explanation": "Brief explanation of the verification result"
-}}
-"""
+  "recommendations": ["rec 1", "rec 2"],
+  "explanation": "brief explanation"
+}}"""
         
         ver_start = time.time()
-        verification_output = slm.generate(verification_prompt, max_tokens=300)
+        verification_output = slm.generate(verification_prompt, max_tokens=250)
         print(f"Verification completed in {time.time() - ver_start:.2f}s")
         
         try:
-            # Try to parse JSON
             json_match = re.search(r'\{[\s\S]*\}', verification_output)
             if json_match:
                 parsed_verification = json.loads(json_match.group(0))
@@ -509,14 +458,11 @@ Evaluate and return JSON ONLY:
             parsed_verification = {
                 "pass_fail": "UNKNOWN",
                 "compliance_score": 0.5,
-                "phase_alignment": "Could not evaluate",
                 "criteria_met": [],
                 "criteria_failed": [],
                 "risk_level": "Medium",
-                "security_concerns": [],
                 "recommendations": ["Manual review required"],
-                "explanation": "Could not parse verification output",
-                "raw_output": verification_output
+                "explanation": "Could not parse verification"
             }
         
         verification_result = parsed_verification
@@ -525,21 +471,16 @@ Evaluate and return JSON ONLY:
     
     return {
         "query": question,
-        "dss_output": formatted_output,  # Return formatted version
-        "context": context,
+        "dss_output": formatted_output,
         "verification": verification_result,
         "conversation_length": len(conversations[session_id]),
         "session_files": session_specific_files,
-        "filtered_search": bool(session_specific_files),
         "sdlc_phase": current_phase,
         "phase_info": phase_info
     }
 
 @app.get("/ask")
 def ask_get(q: str, session_id: str = "default", verify: bool = False, sdlc_phase: str = "auto"):
-    """
-    Ask a question (GET - for backward compatibility)
-    """
     request = ChatRequest(
         question=q,
         session_id=session_id,
@@ -550,11 +491,10 @@ def ask_get(q: str, session_id: str = "default", verify: bool = False, sdlc_phas
 
 @app.post("/set_phase/{session_id}")
 def set_phase(session_id: str, phase: str):
-    """Manually set SDLC phase for a session"""
     if phase not in SDLC_PHASES:
         return {
             "success": False,
-            "message": f"Invalid phase. Valid phases: {list(SDLC_PHASES.keys())}"
+            "message": f"Invalid phase. Valid: {list(SDLC_PHASES.keys())}"
         }
     
     session_phases[session_id] = phase
@@ -567,7 +507,6 @@ def set_phase(session_id: str, phase: str):
 
 @app.get("/phases")
 def list_phases():
-    """List all SDLC phases and their criteria"""
     return {
         "phases": SDLC_PHASES,
         "total": len(SDLC_PHASES)
@@ -575,7 +514,6 @@ def list_phases():
 
 @app.get("/history/{session_id}")
 def get_history(session_id: str):
-    """Get conversation history for a session"""
     return {
         "session_id": session_id,
         "conversation": conversations.get(session_id, []),
@@ -586,7 +524,6 @@ def get_history(session_id: str):
 
 @app.delete("/history/{session_id}")
 def clear_history(session_id: str):
-    """Clear conversation history for a session"""
     if session_id in conversations:
         del conversations[session_id]
     if session_id in session_files:
@@ -602,7 +539,6 @@ def clear_history(session_id: str):
 
 @app.delete("/session/{session_id}/files")
 def clear_session_files(session_id: str):
-    """Clear uploaded files tracking for a session"""
     if session_id in session_files:
         del session_files[session_id]
     if session_id in session_phases:
@@ -614,7 +550,6 @@ def clear_session_files(session_id: str):
 
 @app.post("/session/new")
 def create_new_session():
-    """Create a new session with a unique ID"""
     import uuid
     new_session_id = str(uuid.uuid4())
     session_timestamps[new_session_id] = datetime.now()
@@ -625,7 +560,6 @@ def create_new_session():
 
 @app.get("/cleanup")
 def cleanup_old_sessions(hours: int = 24):
-    """Remove sessions older than X hours"""
     cutoff = datetime.now() - timedelta(hours=hours)
     expired = [sid for sid, ts in session_timestamps.items() if ts < cutoff]
     
@@ -647,7 +581,6 @@ def cleanup_old_sessions(hours: int = 24):
 
 @app.get("/sessions")
 def list_sessions():
-    """List all active sessions"""
     sessions_info = []
     for sid in session_timestamps:
         sessions_info.append({
@@ -664,7 +597,6 @@ def list_sessions():
 
 @app.get("/files")
 def list_files():
-    """List all uploaded files"""
     try:
         files = []
         for file in os.listdir(UPLOAD_DIR):
@@ -693,26 +625,24 @@ def list_files():
 def home():
     return {
         "message": "SDLC Decision Support System (DSS) with RAG",
-        "version": "3.0",
-        "description": "AI-powered system to verify and guide software development across SDLC phases",
+        "version": "4.0",
+        "description": "Concise AI-powered SDLC verification and guidance",
         "features": [
-            "SDLC phase-aware analysis",
-            "Automatic phase detection from uploaded files",
-            "Phase-specific verification criteria",
-            "Session-based file filtering",
+            "Phase-aware analysis with structured output",
+            "Automatic phase detection",
             "Compliance checking and risk assessment",
-            "Best practice recommendations"
+            "Concise, actionable recommendations"
         ],
         "sdlc_phases": list(SDLC_PHASES.keys()),
         "endpoints": {
-            "POST /ask": "Ask questions with SDLC-aware analysis",
-            "POST /upload": "Upload files (auto-detects SDLC phase)",
-            "POST /set_phase/{session_id}": "Manually set SDLC phase",
-            "GET /phases": "List all SDLC phases and criteria",
-            "POST /session/new": "Create new session",
-            "GET /history/{session_id}": "Get conversation history",
-            "DELETE /history/{session_id}": "Clear session history",
-            "GET /sessions": "List all active sessions",
-            "GET /files": "List all files"
+            "POST /ask": "Ask questions with SDLC analysis",
+            "POST /upload": "Upload files",
+            "POST /set_phase/{session_id}": "Set SDLC phase",
+            "GET /phases": "List SDLC phases",
+            "POST /session/new": "Create session",
+            "GET /history/{session_id}": "Get history",
+            "DELETE /history/{session_id}": "Clear history",
+            "GET /sessions": "List sessions",
+            "GET /files": "List files"
         }
     }
